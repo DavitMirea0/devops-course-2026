@@ -44,5 +44,22 @@ check "Incoming policy is deny" deny "$POLICY"
 echo "User accounts:"
 awk -F: '$3>=1000 && $3<65534 {print $1, $3}' /etc/passwd
 
+# Проверки контейнеризации
+check "Docker service active" active "$(systemctl is-active docker 2>/dev/null || true)"
+
+DB_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' app-db-1 2>/dev/null || true)
+check "PostgreSQL container healthy" healthy "$DB_HEALTH"
+
+APP_PORT=$(docker port app-app-1 5000/tcp 2>/dev/null || true)
+DB_PORT=$(docker port app-db-1 5432/tcp 2>/dev/null || true)
+if [[ "$APP_PORT" == "127.0.0.1:5000" && -z "$DB_PORT" ]]; then
+    check "App is loopback-only; DB port is unpublished" yes yes
+else
+    check "App is loopback-only; DB port is unpublished" yes "app=$APP_PORT db=$DB_PORT"
+fi
+
+ENV_MODE=$(stat -c '%a' /home/devops/app/.env 2>/dev/null || true)
+check ".env permissions are 600" 600 "$ENV_MODE"
+
 echo "PASS=$PASS FAIL=$FAIL"
 [[ $FAIL -eq 0 ]]
